@@ -91,7 +91,7 @@ flowchart TD
         direction TB
         S1["Step 1: ユーザ入力受付"]
         S2["Step 2: 構造化データ生成 [LLM]<br/>マルチモーダルLLMでシーン記述・画像を解釈"]:::blackbox
-        S3["Step 3: プロンプト生成戦略の決定 [LLM]<br/>（3戦略のプロンプトバリアント生成）"]:::blackbox
+        S3["Step 3: プロンプト生成戦略の決定 [未定]<br/>（3戦略のプロンプトバリアント生成）<br/>※アルゴリズム or LLM のいずれかを採用"]:::undecided
         S4["Step 4: パラメータ決定"]
         S5["Step 5: 並列生成 [拡散モデル]<br/>（生成エンジン抽象化レイヤー経由）<br/>初期: diffusers直叩き<br/>将来: ComfyUI / 自前最適化に差替可"]:::blackbox
         S6["Step 6: 評価とフィルタリング [評価モデル]<br/>（CLAP / PQスコア計算）"]:::blackbox
@@ -105,9 +105,11 @@ flowchart TD
         direction LR
         L1["アルゴリズム<br/>（コードで決定論的に制御）"]
         L2["モデル呼び出し<br/>（モデル選択・パラメータは調整可、<br/>内部処理は不透明・出力は確率的）"]:::blackbox
+        L3["未決定<br/>（アルゴリズム or モデル呼び出しの<br/>いずれかに確定予定）"]:::undecided
     end
 
     classDef blackbox fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#000
+    classDef undecided fill:#f3f4f6,stroke:#6b7280,stroke-width:2px,stroke-dasharray:5 5,color:#000
 ```
 
 ### 3.2 技術スタック
@@ -120,7 +122,7 @@ flowchart TD
 | 生成エンジン（将来） | ComfyUI連携 / 自前最適化 | Step 5（並列生成） | GPU最適化・複数モデル管理 |
 | 音声生成モデル | Stable Audio Open ほか複数対応 | Step 5（並列生成） | アニメ寄り環境音に強い、複数モデル切替前提 |
 | LLM（マルチモーダル） | Claude API（画像理解） | Step 2（構造化データ生成） | 画像理解の品質が高い |
-| LLM（プロンプト変換） | Ollama（ローカル） | Step 3（プロンプト生成戦略の決定） | コスト0で使い倒せる |
+| LLM（プロンプト変換） | Ollama（ローカル） | Step 3（プロンプト生成戦略の決定）※LLM採用時のみ | コスト0で使い倒せる |
 | 品質評価 | LAION-CLAP, PAMスコア | Step 6（評価とフィルタリング） | 指示追従性と音響品質の評価 |
 
 モデルは複数対応を前提とし、生成エンジン抽象化レイヤーの背後でモデルごとのアダプタを切り替える。モデル本体は同梱せず、ユーザが各自ダウンロードして所定ディレクトリに配置する。
