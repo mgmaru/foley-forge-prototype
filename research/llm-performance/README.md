@@ -86,7 +86,11 @@ FoleyForgeの最大のポイントは、ファインチューニングなしで�
 
 ## ファイル一覧
 
+### 4つのアプローチ
 - `approach-1-prompt-augmentation.md` — LLMによるプロンプト augmentation
 - `approach-2-inference-parameters.md` — 推論時パラメータの最適化
 - `approach-3-best-of-n-reranking.md` — Best-of-N + リランキング
 - `approach-4-retrieval-augmented.md` — 検索拡張（RAG）
+
+### 補足ドキュメント
+- `evaluation-models-clap-pam.md` — 評価モデル（CLAP / PAM）の仕組み。approach-3 で前提となるスコアの計算方法と決定論性を掘り下げる
