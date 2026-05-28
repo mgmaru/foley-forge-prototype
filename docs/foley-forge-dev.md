@@ -90,16 +90,24 @@ flowchart TD
     subgraph BE["バックエンド（Python + FastAPI）"]
         direction TB
         S1["Step 1: ユーザ入力受付"]
-        S2["Step 2: 構造化データ生成（LLM）"]
-        S3["Step 3: プロンプト生成戦略の決定<br/>（3戦略のプロンプトバリアント生成）"]
+        S2["Step 2: 構造化データ生成 [LLM]<br/>マルチモーダルLLMでシーン記述・画像を解釈"]:::blackbox
+        S3["Step 3: プロンプト生成戦略の決定 [LLM]<br/>（3戦略のプロンプトバリアント生成）"]:::blackbox
         S4["Step 4: パラメータ決定"]
-        S5["Step 5: 並列生成（生成エンジン抽象化レイヤー経由）<br/>初期: diffusers直叩き<br/>将来: ComfyUI / 自前最適化に差替可"]
-        S6["Step 6: 評価とフィルタリング<br/>（CLAP / PQスコア計算）"]
+        S5["Step 5: 並列生成 [拡散モデル]<br/>（生成エンジン抽象化レイヤー経由）<br/>初期: diffusers直叩き<br/>将来: ComfyUI / 自前最適化に差替可"]:::blackbox
+        S6["Step 6: 評価とフィルタリング [評価モデル]<br/>（CLAP / PQスコア計算）"]:::blackbox
         S7["Step 7: 候補選別"]
         S8["Step 8: ユーザへの提示と永続化"]
 
         S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> S7 --> S8
     end
+
+    subgraph Legend["凡例"]
+        direction LR
+        L1["アルゴリズム<br/>（コードで決定論的に制御）"]
+        L2["モデル呼び出し<br/>（モデル選択・パラメータは調整可、<br/>内部処理は不透明・出力は確率的）"]:::blackbox
+    end
+
+    classDef blackbox fill:#fef3c7,stroke:#d97706,stroke-width:2px,color:#000
 ```
 
 ### 3.2 技術スタック
