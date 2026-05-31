@@ -1,0 +1,14 @@
+{
+    "permissions": {
+        "deny": [
+            "Bash(gh auth token*)",
+            "Bash(env*)",
+            "Bash(printenv*)",
+            "Bash(echo $GH_TOKEN*)",
+            "Bash(echo $GITHUB_TOKEN*)",
+            "Read(.env)",
+            "Read(.env.*)",
+            "Read(~/.config/gh/**)"
+        ]
+    }
+}
