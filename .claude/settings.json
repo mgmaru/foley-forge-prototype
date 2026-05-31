@@ -10,5 +10,19 @@
             "Read(.env.*)",
             "Read(~/.config/gh/**)"
         ]
+    },
+    "sandbox": {
+        "enabled": true,
+        "network": {
+            "allowDomains": [
+                "github.com",
+                "api.github.com"
+            ]
+        },
+        "filesystem": {
+            "denyRead": [
+                "~/.config/gh"
+            ]
+        }
     }
 }
