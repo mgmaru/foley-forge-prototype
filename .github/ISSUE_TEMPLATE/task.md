@@ -2,7 +2,7 @@
 name: 作業（task）
 about: 作るもの。手を動かせば終わるもの
 title: ""
-labels: ["type:task", "status:undecided"]
+labels: ["type:task"]
 ---
 
 ## 背景

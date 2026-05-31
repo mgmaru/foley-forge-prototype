@@ -280,7 +280,7 @@ CFG値の研究知見を活用する。
 
 これから決める／作る／調べる項目は **GitHub Issues** で1対1で管理する（一覧の俯瞰や絞り込みはラベルで行う）。
 
-- 未決の一覧: [Issues](https://github.com/mgmaru/foley-forge-prototype/issues)（`label:status:undecided` などで絞り込み）
+- 未決の一覧: [Issues](https://github.com/mgmaru/foley-forge-prototype/issues)（`is:open` などで絞り込み）
 - 決定済みの記録: [decisions.md](./decisions.md)
 - Issue・ラベル・決定ログの運用方針: [dev-workflow.md](./dev-workflow.md)
 

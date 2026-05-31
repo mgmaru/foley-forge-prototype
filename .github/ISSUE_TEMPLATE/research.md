@@ -2,7 +2,7 @@
 name: 調査（research）
 about: 調べるもの。判断材料が足りず調査が要るもの
 title: ""
-labels: ["type:research", "status:undecided"]
+labels: ["type:research"]
 ---
 
 ## 背景

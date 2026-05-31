@@ -2,7 +2,7 @@
 name: 決定（decision）
 about: A か B かを選ぶもの。設計でも実装中でも、方針を決める必要がある事項
 title: ""
-labels: ["type:decision", "status:undecided"]
+labels: ["type:decision"]
 ---
 
 ## 背景
