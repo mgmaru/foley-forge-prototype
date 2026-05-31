@@ -258,7 +258,7 @@ CFG値の研究知見を活用する。
 
 ## 8. 主要な設計決定の根拠
 
-本章は全体像レベルの根拠サマリ。個々の決定の正式な記録（決定ID・状態・後戻りの履歴）は [decisions.md](./decisions.md) に集約する。決定・未決・運用の管理方針は [conventions.md](./conventions.md) を参照。
+本章は全体像レベルの根拠サマリ。個々の決定の正式な記録（決定ID・状態・後戻りの履歴）は [decisions.md](./decisions.md) に集約する。決定・未決・運用の管理方針は [dev-workflow.md](./dev-workflow.md) を参照。
 
 | 決定 | 根拠 |
 |------|------|
@@ -282,7 +282,7 @@ CFG値の研究知見を活用する。
 
 - 未決の一覧: [Issues](https://github.com/mgmaru/foley-forge-prototype/issues)（`label:status:undecided` などで絞り込み）
 - 決定済みの記録: [decisions.md](./decisions.md)
-- Issue・ラベル・決定ログの運用方針: [conventions.md](./conventions.md)
+- Issue・ラベル・決定ログの運用方針: [dev-workflow.md](./dev-workflow.md)
 
 ---
 

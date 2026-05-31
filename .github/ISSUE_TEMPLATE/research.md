@@ -18,4 +18,4 @@ labels: ["type:research", "status:undecided"]
 <!-- dev.md の該当箇所、既存 research/ ドキュメント、関連 Issue/決定ID(FF-Dxxx) -->
 
 ---
-<!-- phase ラベルを忘れず付けること（conventions.md 参照） -->
+<!-- phase ラベルを忘れず付けること（dev-workflow.md 参照） -->

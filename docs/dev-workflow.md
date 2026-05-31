@@ -1,4 +1,4 @@
-# 運用ルール（Conventions）
+# 開発の進め方ルール（Issue・ラベル・決定ログ）
 
 > このドキュメントは FoleyForge の開発における「進め方の約束事」を定めます。
 > 決めたことの記録は [decisions.md](./decisions.md) を、開発の全体像・方針は [foley-forge-dev.md](./foley-forge-dev.md) を参照してください。

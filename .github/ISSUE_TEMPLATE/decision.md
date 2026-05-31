@@ -18,4 +18,4 @@ labels: ["type:decision", "status:undecided"]
 <!-- dev.md の該当箇所、research/ ドキュメント、関連 Issue/決定ID(FF-Dxxx) -->
 
 ---
-<!-- 決定したら decisions.md に1行追記してからクローズ（conventions.md 参照）。phase ラベルを忘れず付けること -->
+<!-- 決定したら decisions.md に1行追記してからクローズ（dev-workflow.md 参照）。phase ラベルを忘れず付けること -->
