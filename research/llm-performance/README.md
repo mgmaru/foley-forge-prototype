@@ -94,3 +94,4 @@ FoleyForgeの最大のポイントは、ファインチューニングなしで�
 
 ### 補足ドキュメント
 - `evaluation-models-clap-pam.md` — 評価モデル（CLAP / PAM）の仕組み。approach-3 で前提となるスコアの計算方法と決定論性を掘り下げる
+- `learning-vs-training-free.md` — 「学習するシステム」と「学習しないシステム（training-free）」の違いを初学者向けに解説。4アプローチが共通して前提とする「訓練不要」の土台
