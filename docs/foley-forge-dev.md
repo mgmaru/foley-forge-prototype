@@ -300,4 +300,5 @@ CFG値の研究知見を活用する。
 | PAMスコア | Prompting Audio-Language Modelsで提案されたCLAPベースの品質指標 |
 | Best-of-N | 複数生成して最良のものを選ぶ手法 |
 | リランキング | 生成済み候補を評価指標で並び替え・選別すること |
+| abstain（棄権） | 良い選択肢が無いとき、無理に答えを出さず棄権する判断。機械学習の選択予測（selective prediction / reject option, Chow 1957）に対応する一般概念。本アプリでの発動条件・解釈は[観測・評価設計](./observation-and-evaluation-design.md) §9・§12 を参照 |
 | Freesound | 音声共有プラットフォーム、Stable Audioの訓練データに含まれる |
