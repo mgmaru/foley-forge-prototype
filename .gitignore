@@ -2,3 +2,11 @@
 /_prompts
 # External documentation to refer to during development
 /_local
+
+# Model files — not bundled; users place their own (FF-D004)
+/src/models/*
+!/src/models/README.md
+
+# Generated audio outputs (artifacts)
+/src/outputs/*
+!/src/outputs/README.md
