@@ -355,6 +355,12 @@ flowchart TB
     C ==> IMPROVE["改善を反映（開発者が手動）：<br/>Step2/3 プロンプト・<br/>パラメータ表・重み・モデル選択"]
     IMPROVE -. 次リクエストへ .-> P
 
+    subgraph Legend["凡例（この図の色）"]
+        direction LR
+        LON["青＝オンライン<br/>（内ループ＝実処理・自動・毎リクエスト）"]:::on
+        LOFF["黄＝オフライン<br/>（外ループ＝開発・改善・手動・集計）"]:::off
+    end
+
     classDef on fill:#dbeafe,stroke:#2563eb,color:#000
     classDef off fill:#fef3c7,stroke:#d97706,color:#000
     class IN,P,B6,B7,OUT,HUMAN on
