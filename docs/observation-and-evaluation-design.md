@@ -293,6 +293,13 @@ flowchart TD
     S8["Step8 提示・永続化<br/>観測◎ ｜ 層B 人間アンカー◎（true objective）"]:::algo
     S1 --> S2 --> S3 --> S4 --> S5 --> S6 --> S7 --> S8
 
+    subgraph Legend["凡例（この図の色）"]
+        direction LR
+        LA["緑＝アルゴリズム<br/>（決定論・コードで制御）"]:::algo
+        LB["黄＝生成モデル<br/>（確率的な黒箱：Step2 LLM・Step5 T2A）"]:::box
+        LE["青＝評価モデル<br/>（決定論：Step6 CLAP/PQ。LLMではない）"]:::eval
+    end
+
     classDef box fill:#fef3c7,stroke:#d97706,color:#000
     classDef eval fill:#dbeafe,stroke:#2563eb,color:#000
     classDef und fill:#f3f4f6,stroke:#6b7280,stroke-dasharray:5 5,color:#000
