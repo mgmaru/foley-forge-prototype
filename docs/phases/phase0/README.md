@@ -15,8 +15,17 @@
 
 ```mermaid
 flowchart LR
-    P0["Phase 0【現在】<br/>実現性スパイク<br/>＝最も安く存在的リスクを潰す"]:::now --> P1["Phase 1<br/>薄い縦スライス"] --> P2["Phase 2<br/>改善ループ三点"] --> P3["Phase 3<br/>層A 検証ゲート"] --> P4["Phase 4【本丸】<br/>外ループ1周"]:::goal
+    P0["Phase 0【現在】<br/>実現性スパイク<br/>＝最も安く存在的リスクを潰す"]:::now --> P1["Phase 1<br/>薄い縦スライス"]:::scaf --> P2["Phase 2<br/>改善ループ三点"]:::scaf --> P3["Phase 3<br/>層A 検証ゲート"]:::scaf --> P4["Phase 4【本丸】<br/>外ループ1周"]:::goal
+
+    subgraph Legend["凡例（箱の色）"]
+        direction LR
+        LN["青＝現在のフェーズ"]:::now
+        LS["灰＝足場フェーズ（ループを回す準備）"]:::scaf
+        LG["緑＝ゴール（プロトタイプ本丸）"]:::goal
+    end
+
     classDef now fill:#dbeafe,stroke:#2563eb,color:#000
+    classDef scaf fill:#f3f4f6,stroke:#6b7280,color:#000
     classDef goal fill:#ecfdf5,stroke:#059669,color:#000
 ```
 
@@ -62,16 +71,40 @@ flowchart LR
 
 **2本に分けず、1つのスクリプト内でデバイスを検出して分岐**する（生成ロジックは共通、計測アダプタだけ環境別）。理由：コードの二重化＝ドリフトを避ける／dev §2.3・FF-D003 の「エンジン抽象化」を Phase 0 スケールで先取りできる。
 
+分岐は **OS名ではなく「torch が使える計算バックエンドの可用性」** で行う（`torch.cuda.is_available()` → 不可なら `torch.backends.mps.is_available()` → どちらも不可なら cpu）。今回の2台構成では **バックエンドと OS が 1 対 1 で対応**する（cuda＝Windows、mps＝Mac、cpu＝両方）ので、下図は OS で囲んで示す。
+
 ```mermaid
 flowchart TD
-    START["生成スクリプト（生成ロジックは共通）"] --> DET{"デバイス検出<br/>cuda / mps / cpu"}
-    DET -- cuda --> CUDA["CUDA経路<br/>dtype: fp16 or bf16<br/>計測: torch.cuda.max_memory_allocated()<br/>＋ nvidia-smi"]
-    DET -- mps --> MPS["MPS経路<br/>dtype: float32 / fp16（float64不可）<br/>計測: torch.mps.driver_allocated_memory() 等<br/>＋ psutil RSS ／ CPUフォールバック監視"]
-    DET -- cpu --> CPU["CPUフォールバック<br/>（警告表示・低速。最終手段）"]
+    START["生成スクリプト（生成ロジックは共通・1本）"] --> DET{"デバイス検出<br/>＝使える計算backendを判定<br/>（OS名でなく可用性で分岐）"}
+
+    subgraph WIN["🪟 Windows PC（NVIDIA GPU）"]
+        CUDA["cuda 経路<br/>dtype: fp16 / bf16<br/>計測: torch.cuda.max_memory_allocated() ＋ nvidia-smi"]:::win
+    end
+    subgraph MAC["🍎 Mac（Apple Silicon）"]
+        MPS["mps 経路<br/>dtype: float32 / fp16（float64不可）<br/>計測: torch.mps.* ＋ psutil RSS ／ fallback監視"]:::mac
+    end
+    CPU["cpu 経路（両OS共通・GPU不可時のフォールバック）<br/>警告表示・低速＝最終手段"]:::both
+
+    DET -- "cuda 利用可" --> CUDA
+    DET -- "mps 利用可" --> MPS
+    DET -- "どちらも不可" --> CPU
     CUDA --> LOG[("共通メタデータ<br/>metadata.json")]
     MPS --> LOG
     CPU --> LOG
+
+    subgraph Legend["凡例（箱の色）"]
+        direction LR
+        LW["青＝Windows 専用経路（cuda）"]:::win
+        LM["緑＝Mac 専用経路（mps）"]:::mac
+        LB["灰＝両OS共通（cpu）"]:::both
+    end
+
+    classDef win fill:#dbeafe,stroke:#2563eb,color:#000
+    classDef mac fill:#ecfdf5,stroke:#059669,color:#000
+    classDef both fill:#f3f4f6,stroke:#6b7280,color:#000
 ```
+
+> **「cpu経路」と「MPS内部のCPUフォールバック」は別物**（混同注意）：上図の cpu 経路は **デバイス全体が CPU**（GPUが一切使えない時の最終手段）。一方、Mac には **mps は使うが未対応 op だけ CPU に落ちる**現象があり（§4 の `PYTORCH_ENABLE_MPS_FALLBACK`）、これは mps 経路の中での部分的な落下。後者が多発すると激遅になり実用性のシグナルになる。
 
 > **スコープ境界（重要）**：Phase 0 のデバイス分岐は **「計測のため」**であって、最適化ではない。`local-inference-optimization-strategy.md` の **VRAMティア自動検出・OOMフォールバックは Phase 4** の仕事であり、ここでは作らない。Phase 0 は **環境ごとに dtype 等をハードコード**でよい（roadmap 原則4：scopeを切る／同ドキュメント §6.1「Phase 1〜3 はハードコード」）。
 
@@ -83,13 +116,31 @@ flowchart TD
 
 | 計測軸 | Mac（MPS） | Windows（CUDA） | 記録する値 |
 |---|---|---|---|
-| **メモリ** | `torch.mps.current_allocated_memory()` / `driver_allocated_memory()` / `recommended_max_memory()`＋`psutil` RSS（ユニファイドメモリ占有） | `torch.cuda.max_memory_allocated()`（`reset_peak_memory_stats()` で区間化）＋ `nvidia-smi` | **ピークメモリ**（モデル~3GB級なので24GB/10GBに対し縛りになりにくい＝優先度は速度より下） |
-| **速度** | `time.perf_counter`（cold/warm 別） | 同上（または `torch.cuda.Event`） | **cold**（初回＝ロード＋カーネルコンパイル含む）と **warm**（定常）を分離。**RTF＝音長/生成時間** |
+| **メモリ** | `torch.mps.*` ＋ `psutil` RSS（→ 定義は §4.1） | `torch.cuda.max_memory_allocated()` ＋ `nvidia-smi`（→ 定義は §4.1） | **ピークメモリ**（モデル~3GB級なので24GB/10GBに対し縛りになりにくい＝優先度は速度より下） |
+| **速度** | `time.perf_counter`（cold/warm 別） | 同上（または `torch.cuda.Event`） | **cold**（初回＝ロード＋カーネルコンパイル含む）と **warm**（定常）を分離。**RTF＝生成時間 ÷ 音長**（RTF<1 で実時間より速い） |
 | **安定性（サーマル）** | **ファンレス**：warm連続 N 本で速度が落ちないか監視 | ファンあり：影響小 | 連続生成時の生成時間の推移 |
 | **op互換** | MPS未対応op → CPUフォールバック警告（`PYTORCH_ENABLE_MPS_FALLBACK=1`で可視化） | 基本問題なし | **fallback の有無・頻度**（多いと激遅＝実用不可のシグナル） |
 | **dtype** | **float32必須**（float64不可）。fp16/bf16の可否も確認 | fp16/bf16 | 実際に使えたdtype |
 
 > **Mac で本当に怖いのはVRAMではなく**：(a) MPSで素直に動くか（fallback地獄でないか）、(b) warm時の実速度、(c) ファンレスのスロットリング、の3つ。計測はここに重心を置く。
+
+### 4.1 メモリ計測に使う関数（何を測るか）
+
+メモリは複数のAPIで「異なる切り口」を測る。値の意味を取り違えないよう、各関数の役割を明示する（定義は PyTorch 公式に準拠）。
+
+**Mac（MPS）— `torch.mps.*` ＋ `psutil`**
+
+- `current_allocated_memory()` … 現在 **テンソルが占有**しているGPUメモリ（バイト）。**キャッシュ済みプール分は含まない** ＝ 純粋なテンソル使用量。
+- `driver_allocated_memory()` … Metal ドライバがプロセス用に確保した **GPUメモリ総量**（バイト）。キャッシュ込み ＝ **実フットプリントに近い**。
+- `recommended_max_memory()` … システムが推奨する **上限ワーキングセットサイズ**（バイト）。これを超えると圧迫／スワップの恐れ ＝ **予算の目安**。
+- `empty_cache()`（補助）… キャッシュ済みの未使用メモリを解放。**計測の前後で呼んでノイズを減らす**。
+- `psutil` の RSS（Resident Set Size）… プロセスが確保している **実メモリ（OS視点）**。ユニファイドメモリでは GPU 確保分も RAM に乗るため、**プロセス全体のフットプリント**把握に有用。
+
+**Windows（CUDA）— `torch.cuda.*` ＋ `nvidia-smi`**
+
+- `max_memory_allocated()` … プログラム開始（または `reset_peak_memory_stats()` 以降）の **テンソル占有メモリのピーク**（バイト）。
+- `reset_peak_memory_stats()` … ピーク計測の **起点をリセット** ＝ 生成区間ごとにピークを測れる（生成直前に呼ぶ）。
+- `nvidia-smi`（補助）… プロセス／GPU単位の **VRAM使用量（OS視点）**。ドライバ・他プロセス込みの総量を確認。
 
 ---
 
@@ -250,7 +301,34 @@ flowchart LR
 
 ---
 
-## 12. 参考
+## 12. 用語集（Phase 0 の運用語）
+
+ここで定義するのは **Phase 0 で出てくる「環境・計測まわりの運用語」のみ**。アプリ中核語（**CLAP・PQ・CFGスケール・Best-of-N・T2A・SE・フォーリー・proxy・abstain** 等）は**重複定義してドリフトさせない**ため、[dev §10「用語」](../../foley-forge-dev.md) と [観測・評価設計 第I部](../../observation-and-evaluation-design.md) を参照する。
+
+| 用語 | 説明 |
+|---|---|
+| **スパイク（spike）** | 本実装の前に、特定の技術的疑問を最小コードで確かめる**使い捨ての検証**。Phase 0 全体がこれ |
+| **縦スライス（vertical slice）** | 横に全機能を作らず、入口から出口まで**薄く1本通す**作り方（roadmap 原則2）。Phase 0 では「1モデルを端から端まで通す」 |
+| **スイートスポット（sweet spot）** | パラメータ（特に CFG）の、**品質が最も良くなる値の範囲**。dev §5.2＝CLAPピーク~3.5／音響品質が安定する4–6／アーティファクト発生10+ |
+| **CFG（guidance scale）** | プロンプト追従度を制御する生成パラメータ。値の意味は dev §10 を参照 |
+| **RTF（Real-Time Factor／実時間比）** | **生成時間 ÷ 音の長さ**。**RTF<1 で実時間より速い**（例：10秒の音を5秒で生成＝RTF 0.5）。速度の主指標 |
+| **cold / warm** | **cold**＝初回生成（モデルロード＋カーネル／シェーダのコンパイルを含む・遅い）。**warm**＝2回目以降の定常生成。**分けて測る** |
+| **ユニファイドメモリ（unified memory）** | Apple Silicon で CPU と GPU が**同一の物理メモリ（24GB）を共有**する方式。独立 VRAM が無い＝「VRAM計測」が成立しない理由 |
+| **VRAM** | NVIDIA GPU 等が持つ**専用ビデオメモリ**。Windows 機（10GB）が該当 |
+| **MPS（Metal Performance Shaders）** | PyTorch が **Apple GPU** を使うためのバックエンド。Mac の計算経路 |
+| **CUDA** | NVIDIA GPU 向けの計算基盤。Windows 機の計算経路（**Apple Silicon には無い**） |
+| **CPUフォールバック** | ①**デバイス全体が CPU**（GPU不可時の最終手段）／②**MPS で未対応 op だけ CPU に落ちる**（`PYTORCH_ENABLE_MPS_FALLBACK`）。②が多発すると激遅（§3 の注記） |
+| **dtype / fp16・bf16・float32・float64** | 数値精度。fp16/bf16＝**省メモリ・高速**。MPS は **float64 不可・float32 が基本** |
+| **RSS（Resident Set Size）** | プロセスが実際に使う**物理メモリ量（OS視点）**。`psutil` で取得（§4.1） |
+| **ARC（Adversarial Relativistic-Contrastive post-training）** | Stable Audio Open Small の**高速化後訓練**手法。蒸留に頼らず少ステップ生成を実現 |
+| **HFゲート（gated model）** | Hugging Face で**ライセンス同意＋トークン認証**しないと DL できないモデル。Stable Audio 系が該当（§6・手順2） |
+| **competence / taste** | **competence**＝破綻せず動く能力（**開発者**が判定）／**taste**＝良し悪しの感性（**ユーザー**のもの）。判定の線引きは §5.1 |
+
+> 将来、運用語がフェーズ横断で増えたら中央の `docs/glossary.md` への集約も検討するが、現時点では対象が Phase 0 のみのため本セクションに留める（YAGNI）。
+
+---
+
+## 13. 参考
 
 ### 内部
 - [prototype-roadmap.md](../../prototype-roadmap.md) — Phase 0 の問い・完了条件・範囲外
