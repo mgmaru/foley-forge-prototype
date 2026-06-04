@@ -246,10 +246,14 @@ flowchart TD
 flowchart TD
     C["クリップ1本"] --> L0{"L0 DSP欠陥<br/>無音/クリップ/NaN？"}
     L0 -- "欠陥あり" --> NG["NG（即・自動／耳に依らない）"]:::ng
-    L0 -- "欠陥なし" --> P["独立に並列判定<br/>（互いの結果を見ない＝バイアス防止）"]:::note
-    P --> L1["L1 人間（ブラインド）<br/>OK/部分/NG"]:::anchor
-    P --> L2["L2 CLAP<br/>類似スコア"]:::sub
-    P --> L3["L3 audio-LLM<br/>yes/部分/no"]:::sub
+    subgraph PAR["並列・独立判定（互いの結果を見ない＝バイアス防止）"]
+        L1["L1 人間（ブラインド）<br/>OK/部分/NG"]:::anchor
+        L2["L2 CLAP<br/>類似スコア"]:::sub
+        L3["L3 audio-LLM<br/>yes/部分/no"]:::sub
+    end
+    L0 -- "欠陥なし" --> L1
+    L0 -- "欠陥なし" --> L2
+    L0 -- "欠陥なし" --> L3
     L1 --> R{"L2・L3 は<br/>L1 と一致？"}
     L2 --> R
     L3 --> R
@@ -267,7 +271,6 @@ flowchart TD
     classDef ng fill:#fee2e2,stroke:#dc2626,color:#000
     classDef anchor fill:#dbeafe,stroke:#2563eb,color:#000
     classDef sub fill:#fef3c7,stroke:#d97706,color:#000
-    classDef note fill:#f3f4f6,stroke:#6b7280,color:#000
 ```
 
 - **① 前段ゲート（直列）**：**L0(DSP) が欠陥（無音/クリップ/NaN 等）→ 即 NG**（耳に依らず・客観）。壊れは人間/LLM に聴かせる前に弾く。
