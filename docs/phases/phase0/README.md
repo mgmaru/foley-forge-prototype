@@ -1,0 +1,268 @@
+# Phase 0 進め方の方針 — モデル実現性スパイク（アプリ外）
+
+> 作成日: 2026-06-04
+> ステータス: 計画（**ドラフト・着手前**）。合格ラインの具体値・モデル最終決定・Small の diffusers 対応可否は **未確定**（→ §11）
+> 用途: Phase 0 を「どの順で・何を測り・どこで go/no-go を切るか」を定める実行計画
+> 関連: [prototype-roadmap.md](../../prototype-roadmap.md)（Phase 0 の問い・完了条件・範囲外の出典）/ [phases/README.md](../README.md)（生ログ→昇格の運用）/ [foley-forge-dev.md](../../foley-forge-dev.md)（§2.2 エンジン段階・§5.1/§5.2 プロンプト・CFG）/ [decisions.md](../../decisions.md)（FF-D003/D004/D010/D011）/ [app-design-philosophy.md](../../../research/design-philosophy/app-design-philosophy.md)（§5 定量/定性の分担）/ [local-inference-optimization-strategy.md](../../../research/gpu-optimization/local-inference-optimization-strategy.md)（最適化は Phase 4+）
+
+---
+
+## 0. このドキュメントの位置づけ
+
+[roadmap](../../prototype-roadmap.md) の **Phase 0「モデル実現性スパイク」** を、実際に手を動かせる粒度まで具体化した計画書。ここは [phases/README](../README.md) の言う **「捕獲（capture）」の場**であり、ここで確定した事実（採用モデル・実測値）は decisions.md や正典 docs へ **昇格（promote）** させる（→ §10）。
+
+### Phase 0 の North Star 上の位置
+
+```mermaid
+flowchart LR
+    P0["Phase 0【現在】<br/>実現性スパイク<br/>＝最も安く存在的リスクを潰す"]:::now --> P1["Phase 1<br/>薄い縦スライス"] --> P2["Phase 2<br/>改善ループ三点"] --> P3["Phase 3<br/>層A 検証ゲート"] --> P4["Phase 4【本丸】<br/>外ループ1周"]:::goal
+    classDef now fill:#dbeafe,stroke:#2563eb,color:#000
+    classDef goal fill:#ecfdf5,stroke:#059669,color:#000
+```
+
+> Phase 0 は足場の最初の一段。**「No なら前提が崩れる」存在的リスク（モデルがそもそも使えるか）を、アプリを作る前に最安で潰す**のが狙い（roadmap 背骨原則1：リスク先行）。
+
+---
+
+## 1. Phase 0 が答えるべき問い（roadmap より）
+
+| # | 問い | この計画での確認手段 |
+|---|---|---|
+| Q1 | 選んだ T2A は、手書きプロンプトで **アニメ寄りSE** を実用レベルで作れるか？ | 代表プロンプト集（§7）× 候補モデル（§6）を生成し、**方向性の到達可否**を耳で判定（§5） |
+| Q2 | ローカルGPUでの **生成時間・メモリ** は許容内か？ | 環境別の計測（§4）＝速度(RTF)・メモリ・安定性 |
+| Q3 | **CFG のスイートスポット**はどこか？ | 固定プロンプト × CFGスイープ（dev §5.2：CLAPピーク~3.5／安定4–6／破綻10+ を実機で確認） |
+
+**完了条件**：「このモデルでいける／モデルを変える」の判断＋生成1本あたりの**時間・メモリの実測値**（2環境分）。
+
+---
+
+## 2. 前提：2つの計測環境
+
+本スパイクは **2台**で計測する。数字は環境ごとに別物として記録する（転移しない）。
+
+| 項目 | Mac（主開発機） | Windows（第2計測機） |
+|---|---|---|
+| マシン | MacBook Air | （デスクトップ／ノート） |
+| チップ/GPU | Apple **M5**（10コア 4P+6E） | NVIDIA **GeForce RTX 30シリーズ**（型番要確認 ※1） |
+| メモリ | **24GB ユニファイドメモリ**（CPU/GPU共有・VRAM分離なし） | システムRAM＋**VRAM 10GB**（独立） |
+| 計算バックエンド | **MPS**（Metal）。CUDAなし | **CUDA** |
+| 冷却 | **ファンレス**（連続生成でサーマルスロットリングの恐れ） | ファンあり（影響小） |
+| OS | macOS 26.5 | Windows |
+
+> ※1：ユーザ申告「RTX 300 10G VRAM」は型番の表記揺れ。**10GB VRAM** から RTX 3080(10GB) 等と推定だが、**正確な型番は手順0で確認**して本表に確定する。
+
+### この2環境がスパイクに与える価値
+
+- **Mac の数字** … 「自分の主開発機で反復作業（生成→聴く→調整）が回る速度か」の go/no-go。roadmap 上 Phase 0–3 の対象は開発者本人なので、これが一次判断。
+- **Windows の数字** … 将来のNVIDIAユーザー（OSS公開時）向けの参考値を**安く先取り**。MPS固有の落とし穴の切り分け（「遅いのはMac/MPSのせいか、モデルのせいか」）にも使える対照群。
+
+---
+
+## 3. クロスプラットフォーム方針：1スクリプト＋デバイス分岐
+
+**2本に分けず、1つのスクリプト内でデバイスを検出して分岐**する（生成ロジックは共通、計測アダプタだけ環境別）。理由：コードの二重化＝ドリフトを避ける／dev §2.3・FF-D003 の「エンジン抽象化」を Phase 0 スケールで先取りできる。
+
+```mermaid
+flowchart TD
+    START["生成スクリプト（生成ロジックは共通）"] --> DET{"デバイス検出<br/>cuda / mps / cpu"}
+    DET -- cuda --> CUDA["CUDA経路<br/>dtype: fp16 or bf16<br/>計測: torch.cuda.max_memory_allocated()<br/>＋ nvidia-smi"]
+    DET -- mps --> MPS["MPS経路<br/>dtype: float32 / fp16（float64不可）<br/>計測: torch.mps.driver_allocated_memory() 等<br/>＋ psutil RSS ／ CPUフォールバック監視"]
+    DET -- cpu --> CPU["CPUフォールバック<br/>（警告表示・低速。最終手段）"]
+    CUDA --> LOG[("共通メタデータ<br/>metadata.json")]
+    MPS --> LOG
+    CPU --> LOG
+```
+
+> **スコープ境界（重要）**：Phase 0 のデバイス分岐は **「計測のため」**であって、最適化ではない。`local-inference-optimization-strategy.md` の **VRAMティア自動検出・OOMフォールバックは Phase 4** の仕事であり、ここでは作らない。Phase 0 は **環境ごとに dtype 等をハードコード**でよい（roadmap 原則4：scopeを切る／同ドキュメント §6.1「Phase 1〜3 はハードコード」）。
+
+---
+
+## 4. 計測対象の再定義（VRAM → 環境別の実リスク）
+
+当初案の「VRAM使用率」は **Apple Silicon では成立しない**（VRAMという独立領域がなく24GBを共有、`torch.cuda` 系API不可）。計測対象を**環境別**かつ**本当に効くリスク**へ組み替える。
+
+| 計測軸 | Mac（MPS） | Windows（CUDA） | 記録する値 |
+|---|---|---|---|
+| **メモリ** | `torch.mps.current_allocated_memory()` / `driver_allocated_memory()` / `recommended_max_memory()`＋`psutil` RSS（ユニファイドメモリ占有） | `torch.cuda.max_memory_allocated()`（`reset_peak_memory_stats()` で区間化）＋ `nvidia-smi` | **ピークメモリ**（モデル~3GB級なので24GB/10GBに対し縛りになりにくい＝優先度は速度より下） |
+| **速度** | `time.perf_counter`（cold/warm 別） | 同上（または `torch.cuda.Event`） | **cold**（初回＝ロード＋カーネルコンパイル含む）と **warm**（定常）を分離。**RTF＝音長/生成時間** |
+| **安定性（サーマル）** | **ファンレス**：warm連続 N 本で速度が落ちないか監視 | ファンあり：影響小 | 連続生成時の生成時間の推移 |
+| **op互換** | MPS未対応op → CPUフォールバック警告（`PYTORCH_ENABLE_MPS_FALLBACK=1`で可視化） | 基本問題なし | **fallback の有無・頻度**（多いと激遅＝実用不可のシグナル） |
+| **dtype** | **float32必須**（float64不可）。fp16/bf16の可否も確認 | fp16/bf16 | 実際に使えたdtype |
+
+> **Mac で本当に怖いのはVRAMではなく**：(a) MPSで素直に動くか（fallback地獄でないか）、(b) warm時の実速度、(c) ファンレスのスロットリング、の3つ。計測はここに重心を置く。
+
+---
+
+## 5. 合格基準の事前登録（go/no-go）— **生成して聴く前に決める**
+
+Phase 0 の肝。**結果を見てから基準を作ると後付け正当化になる**。粗くてよいので着手前に登録し、実測後に値だけ較正する（roadmap §4「初期は手で決める」と整合）。
+
+### 5.1 これは「能力(competence)の判定」であって「感性(taste)の判定」ではない
+
+philosophy §5・観測評価 §12原則7 の線引きを Phase 0 にも適用する。
+
+| 見るもの | Phase 0 で判定する | 判定者 |
+|---|---|---|
+| **方向性の到達可否**（「雨の森」と言って雨/森系の音の方向に行くか、破綻・無音・無関係でないか）＝ competence | **する** | 開発者（仕組みの責任者） |
+| **綺麗さの優劣**（どちらの雨がより美しいか）＝ taste | **しない**（過適合を招く） | 本来ユーザーのもの。Phase 0 では踏み込まない |
+
+> たまたま当たった1サンプルの美しさで1モデルに肩入れしない。**「代表プロンプト集の何割で“素材として使える方向性”に届くか」**という再現性ベースで見る。
+
+### 5.2 合格ラインの枠（数値は仮置き＝要確定）
+
+| 軸 | 問い | 指標 | 仮の合格ライン（**要確定**） |
+|---|---|---|---|
+| **品質（方向性）** | 実用方向の音が出るか | 代表プロンプト集のうち「方向性OK」の割合 | 例：**過半数**で方向性OK |
+| **速度** | 反復作業に耐えるか | warm時の音1本あたり生成時間 ／ RTF | 例：Macで 10秒音を **≤30–60秒** ／ Winで **RTF<1**（実測後に確定） |
+| **メモリ・安定** | 載るか・連続で破綻しないか | ピークメモリ／連続生成のスロットリング | Mac：24GB内で連続安定 ／ Win：**10GB VRAM内** |
+| **互換性** | その環境で素直に動くか | CPUフォールバック頻度・致命的エラー | 致命的エラーなし・fallback限定的 |
+
+### 5.3 判定の出口
+
+```mermaid
+flowchart TD
+    R["実測（2環境）＋耳での方向性確認"] --> J{"事前登録した基準を満たすか"}
+    J -- "満たす" --> GO["go：このモデルで Phase 1 へ<br/>→ 採用モデルを decisions.md に昇格（FF-Dxxx）"]:::go
+    J -- "品質NG" --> CHG["モデル変更：別候補へ"]:::chg
+    J -- "速度/安定NGだが品質OK" --> REV["前提見直し：dtype/長さ/Best-of-N本数を下げて再測 or Small系へ"]:::rev
+    classDef go fill:#ecfdf5,stroke:#059669,color:#000
+    classDef chg fill:#fee2e2,stroke:#dc2626,color:#000
+    classDef rev fill:#fef3c7,stroke:#d97706,color:#000
+```
+
+---
+
+## 6. 進め方の手順（修正版・リスク先行）
+
+「3モデル分の環境を組んでから生成」ではなく、**まず1モデルを端から端まで通して存在的リスクを潰し**、通ってから横展開する（roadmap 原則2：縦スライス優先）。
+
+```mermaid
+flowchart TD
+    P0["手順0 環境構築＋事前登録<br/>venv / torch(MPS・CUDA) / 合格基準(§5)・代表プロンプト(§7) 確定"]
+    P1["手順1 モデル＆ライブラリ調査<br/>『その環境で動く経路があるか』でフィルタ → 3候補(§6表)"]
+    P2["手順2 1モデルをDL・配置<br/>HFゲート認証 → src/models/（gitignore・FF-D011）"]
+    V["手順3-5【縦スライス】1モデルを端から端まで<br/>最小スクリプト → 代表プロンプト1本 → 生成・再生"]
+    G{"音が出て<br/>実用的に動くか？"}
+    NG["早期に軌道修正<br/>（環境前提 or モデルを見直し）"]
+    SWEEP["手順5' 比較の枠を整える<br/>固定プロンプト×CFGスイープ×seed ＋ メタデータ保存(§8)"]
+    H["手順1-2-5 横展開<br/>残り2モデルを同じ枠に載せる"]
+    M["手順6 計測（環境別・§4）<br/>cold/warm・RTF・メモリ・サーマル・fallback"]
+    E["手順7 評価・選定<br/>事前登録した基準(§5)で go / 変更 を判定 → 昇格(§10)"]
+    P0 --> P1 --> P2 --> V --> G
+    G -- No --> NG --> P1
+    G -- Yes --> SWEEP --> H --> M --> E
+```
+
+| 手順 | 内容 | 要点・前のやり取りからの修正 |
+|---|---|---|
+| **0** | 環境構築＋事前登録 | venv（**Python 3.11+**。システムの3.9.6は使わない）。Mac=既定wheel（MPS同梱）／Win=CUDA対応wheel。**合格基準(§5)と代表プロンプト(§7)をここで確定** |
+| **1** | モデル＆ライブラリ調査 | 「良いモデル」ではなく**「その環境で動く経路があるモデル」**でフィルタ（＝当初手順3を前倒しし手順1と一体化）。候補は §6 |
+| **2** | DL・配置 | Stable Audio系は **HFゲート（ライセンス同意＋トークン）**。配置は `src/models/`（FF-D004：同梱しない／FF-D011：gitignore対象） |
+| **3** | 生成スクリプト | デバイス分岐(§3)＋**メタデータ保存を最初から**(§8)。安く、後フェーズの習慣になる |
+| **4** | プロンプト用意 | §7。**Freesound風の構造**（源＋動作＋特性＋品質＋ネガティブ）で手書き（dev §5.1／FF-D010） |
+| **5** | 生成実行 | 単発でなく **固定プロンプト × CFGスイープ × 数seed** のグリッド（Q3のスイートスポット確認） |
+| **6** | 計測 | §4。**cold/warm分離**・2環境 |
+| **7** | 評価・選定 | §5の基準で判定。**CLAP/PQは作らない**（範囲外）。耳＋実測値のみ |
+
+---
+
+## 7. モデル候補（3つ）
+
+Web調査を踏まえた作業候補。**最終決定は手順1**（特に Apple Silicon で動く経路の確認後）。
+
+| 候補 | 規模/特徴 | Phase 0 での役割 | 確認事項 |
+|---|---|---|---|
+| **Stable Audio Open 1.0** | ~1.2B / 最長47s / 44.1kHz stereo。Freesound+FMAのCC学習。SE/field recordingで AudioLDM2/AudioGen を上回る報告。dev のリファレンス | **基準線**。diffusers `StableAudioPipeline` | MPSでの実速度・fallback |
+| **Stable Audio Open Small** | 341M / ~11s / ARC後訓練。Arm/オンデバイス最適化（スマホで11秒を8秒未満） | **実用速度の本命候補**（M5 Airに最も適合しうる） | **diffusersで動くか／`stable-audio-tools`必須か要確認** |
+| **対照群（TangoFlux or AudioLDM2 等）** | 別系統（rectified flow / LDM）。diffuersに `AudioLDM2Pipeline` あり | **1系統に賭けない保険**。異なる失敗モードを見る | SE用途での方向性 |
+
+> 構成意図：**同一ファミリー2つ（1.0 / Small）＋他系統1つ**＝「3モデル比較」の自然な形。1.0で品質基準、Smallで速度、対照群で系統リスクの分散。
+
+---
+
+## 8. スクリプト／メタデータ設計
+
+品質調整の鉄則（docker比較ドキュメント §15）に従い、**音声と生成条件を必ずペアで保存**する。Phase 0 から始めれば Phase 2 以降の永続化（dev §7）の素地になる。
+
+保存先：`src/outputs/`（gitignore・FF-D011）。1生成＝1ディレクトリ（音声＋metadata）。
+
+| metadata に残す項目 | 例/備考 |
+|---|---|
+| model / model_version | `stable-audio-open-1.0` |
+| device / dtype | `mps`+`float32` ／ `cuda`+`float16` |
+| prompt / negative_prompt | Freesound風（§7） |
+| seed / cfg(guidance_scale) / steps / duration_sec / sample_rate | スイープ条件 |
+| **gen_time_cold_sec / gen_time_warm_sec** | §4：分離して記録 |
+| **rtf** | 音長/生成時間 |
+| **peak_memory**（環境別API値＋RSS） | §4 |
+| **mps_cpu_fallback**（有無・該当op） | Mac のみ。実用性のシグナル |
+| created_at / notes（耳での所感） | 「方向性OK／後半ノイズ」等 |
+
+---
+
+## 9. スコープ（Phase 0 でやらないこと）
+
+roadmap Phase 0「範囲外」に沿う。**やらないことを明示してスコープ膨張を防ぐ**（原則4）。
+
+| やらない | いつやるか |
+|---|---|
+| CLAP / PQ など評価指標の実装 | Phase 2（採点）。Phase 0 は耳＋実測のみ |
+| LLM / 構造化データ / Step3 プロンプトビルダー | Phase 1–2 |
+| FastAPI / React / アプリ化 | Phase 1以降 |
+| VRAMティア自動検出・OOMフォールバック・量子化・最適化 | **Phase 4+**（local-inference-optimization §6.1） |
+| 複数モデルの抽象化レイヤー本実装 | Phase 1以降（Phase 0 は分岐の最小版のみ） |
+
+> **例外的に Phase 0 から入れる**：metadata保存(§8)。安く、後の習慣になるため。
+
+---
+
+## 10. 成果物と昇格
+
+```mermaid
+flowchart LR
+    CAP["docs/phases/phase0/<br/>実測値・試行ログ・没案・耳の所感（capture）"]:::cap
+    DEC["decisions.md<br/>採用モデル ＝ FF-Dxxx"]:::dec
+    CANON["正典docs<br/>dev / 観測評価 / roadmap"]:::can
+    RES["research/<br/>再利用可能な知見<br/>（例：MPSでのT2A実測ノート）"]:::res
+    CAP -->|決定になった| DEC
+    CAP -->|設計を変える| CANON
+    CAP -->|再利用価値ある知見| RES
+    classDef cap fill:#dbeafe,stroke:#2563eb,color:#000
+    classDef dec fill:#ecfdf5,stroke:#059669,color:#000
+    classDef can fill:#ede9fe,stroke:#7c3aed,color:#000
+    classDef res fill:#fef3c7,stroke:#d97706,color:#000
+```
+
+- **生ログ**（実測CSV/表・没プロンプト・所感）は本ディレクトリ `docs/phases/phase0/` に貯める。
+- **採用モデルが決まったら** decisions.md に **FF-Dxxx** として昇格（roadmap §4「どのモデルを候補にするか」の決着）。
+- **2環境の実測値**で `local-inference-optimization-strategy.md`（CUDA/VRAM前提）に **Apple Silicon の章**が必要と判明したら research へ昇格。
+
+---
+
+## 11. 未決事項（着手前 or 着手中に確定）
+
+- **合格ラインの具体値**（§5.2）：速度の秒数・方向性OKの割合。**着手前に仮値→実測後に較正**。
+- **モデル最終決定**（§6・§7）：特に **Stable Audio Open Small が diffusers で動くか**（`stable-audio-tools` 必須なら手間が変わる）。対照群を TangoFlux / AudioLDM2 のどちらにするか。
+- **Windows GPU の正確な型番**（§2 ※1）。
+- **代表プロンプト集の確定**（§7・別途 §で詳細化予定）：音種別×シナリオを 5–8本。
+- **生成する音の長さ・本数**（スイープのグリッドサイズ）：Best-of-N を想定しつつ Phase 0 は小さく。
+- **Python/torch の確定バージョン**：MPS安定版・CUDA対応wheelのバージョン整合。
+
+---
+
+## 12. 参考
+
+### 内部
+- [prototype-roadmap.md](../../prototype-roadmap.md) — Phase 0 の問い・完了条件・範囲外
+- [phases/README.md](../README.md) — capture→promote 運用
+- [foley-forge-dev.md](../../foley-forge-dev.md) — §2.2 diffusers直叩き ／ §5.1 Freesound風プロンプト ／ §5.2 CFG ／ Step5 モデル管理
+- [decisions.md](../../decisions.md) — FF-D003(複数モデル)／FF-D004(同梱しない)／FF-D010(プロンプト構造)／FF-D011(src/構成・gitignore)
+- [app-design-philosophy.md](../../../research/design-philosophy/app-design-philosophy.md) — §5 定量(開発者)/定性(ユーザー)の分担
+- [local-inference-optimization-strategy.md](../../../research/gpu-optimization/local-inference-optimization-strategy.md) — 最適化はPhase 4+（**CUDA/VRAM前提＝Apple Siliconは要追補**）
+- [docker_vs_non_docker_tta_development.md](../../../research/development/docker_vs_non_docker_tta_development.md) — §15 metadata保存形式
+
+### 外部（裏取り）
+- Stable Audio Open 1.0：[HF](https://huggingface.co/stabilityai/stable-audio-open-1.0) ／ Small：[HF](https://huggingface.co/stabilityai/stable-audio-open-small)・[Stability×Arm発表](https://stability.ai/news-updates/stability-ai-and-arm-release-stable-audio-open-small-enabling-real-world-deployment-for-on-device-audio-control)
+- diffusers：[MPS(Apple Silicon)最適化](https://huggingface.co/docs/diffusers/en/optimization/mps) ／ [AudioLDM2 pipeline](https://huggingface.co/docs/diffusers/api/pipelines/audioldm2)
+- PyTorch：[torch.mps メモリAPI](https://docs.pytorch.org/docs/stable/mps.html)
+- [TangoFlux 概要](https://sonusahani.com/blogs/tangoflux-ai-text-to-audio)
