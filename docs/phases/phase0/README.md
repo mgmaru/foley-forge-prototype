@@ -447,19 +447,17 @@ Web調査を踏まえた作業候補。**最終決定は手順1**（特に Apple
 
 品質調整の鉄則（docker比較ドキュメント §15）に従い、**音声と生成条件を必ずペアで保存**する。Phase 0 から始めれば Phase 2 以降の永続化（dev §7）の素地になる。
 
-保存先：`src/outputs/`（gitignore・FF-D011）。1生成＝1ディレクトリ（音声＋metadata）。
+保存先：`src/outputs/phase0/<run_id>/`（gitignore・FF-D011）。**run/clip の2層**で持ち、**audio/ と metadata/ を分離**して、§5.4 のブラインド判定（判定者は中立名 wav だけ聴く）と「音声と生成条件のペア保存」を両立させる。スキーマの確定形は **`src/spikes/phase0/schema.py`**（dataclass・v0＝最初の生成で較正）。
 
-| metadata に残す項目 | 例/備考 |
-|---|---|
-| model / model_version | `stable-audio-open-1.0` |
-| device / dtype | `mps`+`float32` ／ `cuda`+`float16` |
-| prompt / negative_prompt | Freesound風（§8） |
-| seed / cfg(guidance_scale) / steps / duration_sec / sample_rate | スイープ条件 |
-| **gen_time_cold_sec / gen_time_warm_sec** | §4：分離して記録 |
-| **rtf** | 生成時間 ÷ 音長（RTF<1 で実時間より速い・§4/§13） |
-| **peak_memory**（環境別API値＋RSS） | §4 |
-| **mps_cpu_fallback**（有無・該当op） | Mac のみ。実用性のシグナル |
-| created_at / notes | 自由メモ |
+```
+src/outputs/phase0/<run_id>/
+  run.json                  # run単位（model/env/grid/dtype/model_load_sec）を1回
+  audio/clip_0001.wav  …    # 判定者が聴くのはここだけ（中立連番名）
+  metadata/clip_0001.json … # 1クリップの全条件＋実測（model名を含む＝判定中は開かない）
+  （手順7で追加）mapping.csv / judgments.csv   # 判定段階で作る（v0では作らない）
+```
+
+どの情報を run と clip のどちらに置くかは「全 clip で同じか／1本ごとに違うか」で決める（共通項目を多数の clip で重複させないため）。**個々の項目（全フィールドの型・意味）は正本の `src/spikes/phase0/schema.py`（dataclass）に置き、README には再掲しない**（コード＝正本にしてドリフトを防ぐ・§13）。
 
 > **方向性の判定（人間/CLAP/LLM/DSP欠陥）は、こことは別に §5.4 のブラインド記録（`judgments.csv`）に持つ**。両者は `clip_id` で結合する（判定中はモデル名を伏せるため、生成条件の metadata と判定結果を分離して保存する）。
 
@@ -516,9 +514,11 @@ flowchart LR
 - [x] **各シーンの英語プロンプト文の起案** → ドラフト `src/spikes/phase0/prompts.yaml`（§8.3）。**spike で調整**（要レビュー）。
 - [ ] **合格ラインの具体値**（§5.3）：方向性OKの割合・速度の足切り値。**着手前に仮値→実測後に較正**（構造は確定済み・**数値が未確定**）。
 - [ ] **多角判定の具体パラメータ**（§5.4）：DSP欠陥の閾値（無音dB・クリップ率）／CLAP の扱い／**採用するクラウド audio-LLM（音声対応・モデル名/版）**／L1〜L3 の不一致をどう扱うか。
+- [ ] **判定CSV（mapping/judgments）のスキーマ**（§5.4(4)）：**手順7（判定）で確定**。`clip_id` を JOINキーに metadata と結合。判定中は mapping を見ない運用。
 - [ ] **モデル最終決定**（§6・§7）：特に **Stable Audio Open Small が diffusers で動くか**（`stable-audio-tools` 必須なら手間が変わる）。対照群を TangoFlux / AudioLDM2 のどちらにするか。
 - [ ] **Windows GPU の正確な型番**（§2 ※1）。
 - [x] **生成条件**（長さ・CFG・Best-of-N・seed・steps）→ **§9.1 で確定**（grid 432回・単一 run で CFG 掃く・N=3 は速度次第で N=2 に調整可）。
+- [x] **metadata スキーマ確定**（§9.2）：spike 出力を「スクリプトが依存できる契約」に確定 → `src/spikes/phase0/schema.py`（dataclass・v0）。**run/clip の2層**＋**audio/metadata 分離**（§5.4 ブラインド対応）。cold/warm は `gen_time_sec`＋`is_cold`、ロードは run の `model_load_sec`。**v0 はドラフト＝最初の生成で較正**。
 - [ ] **Python/torch の確定バージョン**：MPS安定版・CUDA対応wheelのバージョン整合。
 
 ---

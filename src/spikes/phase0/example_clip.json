@@ -1,0 +1,31 @@
+{
+  "clip_id": "clip_0001",
+  "run_id": "20260605T1430_sao10_mps",
+  "prompt_id": "env_rain_forest",
+  "tier": "body",
+  "source": "環境音",
+  "temporal": "環境",
+  "prompt": "gentle rain falling in a quiet forest, soft raindrops on leaves, distant trees rustling in a light breeze, calm natural ambience, field recording",
+  "negative_prompt": "music, speech, voice, distortion, clipping",
+  "cfg": 5.0,
+  "seed": 0,
+  "duration_sec": 10,
+  "audio_file": "audio/clip_0001.wav",
+  "gen_time_sec": 7.1,
+  "is_cold": false,
+  "rtf": 0.71,
+  "memory": {
+    "mps_current_allocated_bytes": 3120000000,
+    "mps_driver_allocated_bytes": 3550000000,
+    "mps_recommended_max_bytes": 17000000000,
+    "cuda_max_allocated_bytes": null,
+    "nvidia_smi_used_bytes": null,
+    "rss_bytes": 4800000000
+  },
+  "mps_cpu_fallback": {
+    "occurred": false,
+    "ops": []
+  },
+  "schema_version": "0.1",
+  "notes": "例（schema.py の ClipMeta に対応・実測値はダミー）"
+}
