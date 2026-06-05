@@ -6,6 +6,8 @@
 # - prompt は英語（モデルが Freesound 英語キャプションで学習）。scene_ja は人間用ラベル。
 # - tier: body  = カバー率の母数 N=6（§8.1）
 #         diagnostic = デザインSE/非現実音。本体カバー率に入れず別報告（§8.1 昇格ルール）
+# - duration: 生成秒数。temporal 別（単発3 / 継続6 / 環境10）。全モデル ≤ Small ~11s（§9.1）。
+# - CFG/Best-of-N/seed/steps 等の run 条件は §9.1（このファイルには持たない）。
 # - negative_prompt の効きはモデル依存（Stable Audio Open / AudioLDM2 は対応、他は要確認）。
 prompts:
   # ── 本体（カバー率の母数 N=6）──
@@ -14,6 +16,7 @@ prompts:
     scene_ja: 雨の森（静かな雨＋木々のざわめき）
     source: 環境音
     temporal: 環境
+    duration: 10
     tier: body
     prompt: "gentle rain falling in a quiet forest, soft raindrops on leaves, distant trees rustling in a light breeze, calm natural ambience, field recording"
     negative_prompt: "music, speech, voice, distortion, clipping"
@@ -23,6 +26,7 @@ prompts:
     scene_ja: 夜の街の喧騒（遠くの車・人のざわめき）
     source: 環境音
     temporal: 環境
+    duration: 10
     tier: body
     prompt: "nighttime city street ambience, distant cars passing, faint crowd murmur, occasional far-off horn, quiet urban night atmosphere, field recording"
     negative_prompt: "music, clear speech, distortion, clipping"
@@ -32,6 +36,7 @@ prompts:
     scene_ja: 土の上を走る足音
     source: フォーリー
     temporal: 継続
+    duration: 6
     tier: body
     prompt: "footsteps running on dirt and gravel, fast rhythmic steps of a single person sprinting outdoors, dry close foley recording"
     negative_prompt: "music, speech, heavy reverb, distortion, clipping"
@@ -41,6 +46,7 @@ prompts:
     scene_ja: 振り向く時の衣擦れ
     source: フォーリー
     temporal: 単発
+    duration: 3
     tier: body
     prompt: "quick cloth rustle as a person turns, fabric swish of clothing in a single short movement, subtle close foley recording"
     negative_prompt: "music, speech, loud impact, distortion"
@@ -50,6 +56,7 @@ prompts:
     scene_ja: 剣の金属衝突
     source: ハードFX
     temporal: 単発
+    duration: 3
     tier: body
     prompt: "two metal swords clashing, sharp metallic impact with a bright ringing tail, single forceful blade strike, cinematic"
     negative_prompt: "music, speech, muffled, distortion, clipping"
@@ -59,6 +66,7 @@ prompts:
     scene_ja: 爆発（遠距離の轟音）
     source: ハードFX
     temporal: 単発
+    duration: 4
     tier: body
     prompt: "distant explosion, deep low boom with a long rumbling tail, powerful far-off blast, cinematic, single event"
     negative_prompt: "music, speech, thin tinny, clipping"
@@ -69,6 +77,7 @@ prompts:
     scene_ja: 魔法の発動（チャージ→放出）
     source: デザインSE
     temporal: 単発〜継続
+    duration: 6
     tier: diagnostic
     prompt: "magical spell casting, energy charging up then releasing in a bright burst, shimmering whoosh, fantasy designed sound effect"
     negative_prompt: "music, speech, realistic field recording, distortion"
@@ -78,6 +87,7 @@ prompts:
     scene_ja: 変身の「キラーン」
     source: デザインSE
     temporal: 単発
+    duration: 3
     tier: diagnostic
     prompt: "magical transformation sparkle, bright shimmering chime and ascending twinkle, fantasy designed sound effect"
     negative_prompt: "music, speech, distortion, clipping"
