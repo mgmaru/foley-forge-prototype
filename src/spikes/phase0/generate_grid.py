@@ -40,18 +40,19 @@ def write_json(path, dataclass_obj) -> None:
 
 def main() -> None:
     ap = argparse.ArgumentParser()
-    ap.add_argument("--full", action="store_true", help="本番グリッド（全prompt×CFG3×seed3）")
-    full = ap.parse_args().full
+    ap.add_argument("--full", action="store_true", help="本番グリッド（全prompt×CFG3×seed3）。未指定なら小サブセット検証")
+    full = ap.parse_args().full   # True=本番グリッド全件 ／ False(既定)=小サブセット検証
 
     device = engine.pick_device()
-    if device != "mps":
-        print(f"[warn] device={device}（mps を想定）。cpu は非常に遅い／サンドボックス外で実行を")
+    if device == "cpu":
+        # cpu は GPU フォールバック＝非常に遅い。mps/cuda はどちらも GPU なので警告しない
+        print("[warn] device=cpu は非常に遅い。GPU(mps/cuda)・サンドボックス外での実行を推奨")
     dtype = engine.device_dtype(device)
 
     all_prompts = engine.load_prompts()
-    if full:
+    if full:   # 本番：全prompt × CFG3 × seed3
         prompts, cfgs, seeds = all_prompts, CFG_SET, SEED_SET
-    else:
+    else:      # 検証：少数のサブセット
         prompts = [p for p in all_prompts if p["id"] in SUBSET_PROMPT_IDS]
         cfgs, seeds = SUBSET_CFG, SUBSET_SEED
     tasks = [(p, cfg, seed) for p in prompts for cfg in cfgs for seed in seeds]

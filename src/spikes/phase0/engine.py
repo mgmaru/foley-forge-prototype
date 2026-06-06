@@ -6,8 +6,11 @@ OS やモデルを変えても使い回せるよう、以下を集約する：
   - device 別メモリ計測（§4.1：mps_* / cuda_* / rss）       ← OS変更に効く
   - モデル読込（＋SAO最終ステップ guard）／生成／prompts.yaml 読込
 
-今は SAO 1.0 / MPS が主だが、モデル追加は `load_pipeline` に分岐を足すだけ、
-OS 変更は `pick_device` / `device_dtype` / `measure_memory` が吸収する設計。
+今は SAO 1.0 / MPS 専用。
+  - **OS 変更**：`pick_device` / `device_dtype` / `measure_memory` / `env_info` が吸収（汎用）。
+  - **モデル追加**：`load_pipeline`（読込）と `generate`（pipe呼び出し引数・出力の取り出し）の**両方が
+    SAO 固有**なので、両者を含む「アダプタ」を1組新たに足す必要がある。本格的な複数モデル抽象は
+    Phase 1 / FF-D003 の仕事で、Phase 0 はこの最小版に留める（§3）。
 
 実行は必ずサンドボックスの外で（MPS。memory: mps-blocked-by-sandbox）。
 """
@@ -99,7 +102,7 @@ def apply_final_step_noise_guard() -> None:
     sde.BrownianTreeNoiseSampler._ff_guarded = True
 
 
-# ── モデル読込 / 生成 ───────────────────────────────────────────────────────
+# ── SAO アダプタ：モデル読込 / 生成（★モデル固有。別モデル追加時はこの1組を新規に）──────
 def model_dir(model_name: str) -> Path:
     """モデル名 → ローカル配置パス（src/models/<name>・FF-D004/D011）。"""
     return REPO_ROOT / "src" / "models" / model_name
@@ -125,6 +128,10 @@ def generate(pipe, *, prompt: str, negative_prompt: str, steps: int, cfg: float,
 
     初期ノイズは CPU generator で固定＝再現性（diffusers 推奨）。
     audios[0] は (channels, samples) なので転置して soundfile 用に (samples, channels) で返す。
+
+    ★モデル固有：pipe(...) のキーワード（audio_end_in_s・num_waveforms_per_prompt）と出力の
+      取り出し（res.audios[0].T）は StableAudioPipeline 前提。別モデルでは引数名・出力形が異なるため、
+      その場合は別アダプタ（この generate の対応版）を用意する。
     """
     g = torch.Generator("cpu").manual_seed(seed)
     t = time.perf_counter()
