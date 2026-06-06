@@ -515,11 +515,14 @@ flowchart LR
 - [ ] **合格ラインの具体値**（§5.3）：方向性OKの割合・速度の足切り値。**着手前に仮値→実測後に較正**（構造は確定済み・**数値が未確定**）。
 - [ ] **多角判定の具体パラメータ**（§5.4）：DSP欠陥の閾値（無音dB・クリップ率）／CLAP の扱い／**採用するクラウド audio-LLM（音声対応・モデル名/版）**／L1〜L3 の不一致をどう扱うか。
 - [ ] **判定CSV（mapping/judgments）のスキーマ**（§5.4(4)）：**手順7（判定）で確定**。`clip_id` を JOINキーに metadata と結合。判定中は mapping を見ない運用。
-- [ ] **モデル最終決定**（§6・§7）：特に **Stable Audio Open Small が diffusers で動くか**（`stable-audio-tools` 必須なら手間が変わる）。対照群を TangoFlux / AudioLDM2 のどちらにするか。
+- [ ] **モデル最終決定**（§6・§7）：**SAO 1.0 は Mac/MPS で生成確認済み＝基準線は確立**（diffusers `StableAudioPipeline`・float32・最終ステップのガード要）。残りは **Small が diffusers で動くか**（`stable-audio-tools` 必須なら手間が変わる）／対照群を TangoFlux / AudioLDM2 のどちらにするか。
 - [ ] **Windows GPU の正確な型番**（§2 ※1）。
 - [x] **生成条件**（長さ・CFG・Best-of-N・seed・steps）→ **§9.1 で確定**（grid 432回・単一 run で CFG 掃く・N=3 は速度次第で N=2 に調整可）。
 - [x] **metadata スキーマ確定**（§9.2）：spike 出力を「スクリプトが依存できる契約」に確定 → `src/spikes/phase0/schema.py`（dataclass・v0）。**run/clip の2層**＋**audio/metadata 分離**（§5.4 ブラインド対応）。cold/warm は `gen_time_sec`＋`is_cold`、ロードは run の `model_load_sec`。**v0 はドラフト＝最初の生成で較正**。
-- [ ] **Python/torch の確定バージョン**：MPS安定版・CUDA対応wheelのバージョン整合。
+- [x] **縦スライス通過（手順3–5）**：SAO 1.0 を Mac/MPS で生成 → 「雨の森」が**方向性OK（耳）**＋出力が L0 DSP 健全。**Phase 0 の存在的リスク（Q1：T2A で実用方向のSEが作れるか）を1プロンプトで突破**（残り本体プロンプトでの確認は未）。スモークは `src/spikes/phase0/smoke_generate.py`。
+- [ ] **Python/torch の確定バージョン**：**Mac/MPS 側は確定**（Python 3.12 / torch 2.12.0 / diffusers 0.37.1 ＋ transformers・soundfile・numpy・pyyaml・psutil・torchsde・accelerate。MPS 実動作確認済み）。**CUDA 対応 wheel（Windows・第2環境）は未**。
+- [ ] **速度・グリッド実行可能性（Q2）**：cold＋サーマルスロットリングで **1本 ~5分（RTF~30・100step）** と遅い。本番グリッド（216生成）の現実性に直結 → **steps削減・冷却（間欠生成）・N調整**で実用速度を出せるか要検討（§9.1 の N調整と併せて）。
+- [ ] **本番スクリプトへのガード移植**：SAO×MPS の**最終ステップ SDEノイズのガード**（→ [research/debugging](../../../research/debugging/stable-audio-final-step-nan-recursion.md)）を本番生成にも入れる。将来は upstream 修正・版固定・別スケジューラも検討。
 
 ---
 
