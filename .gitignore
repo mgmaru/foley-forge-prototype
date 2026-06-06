@@ -10,3 +10,7 @@
 # Generated audio outputs (artifacts)
 /src/outputs/*
 !/src/outputs/README.md
+
+# Python bytecode cache
+__pycache__/
+*.py[cod]
