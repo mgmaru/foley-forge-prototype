@@ -1,9 +1,24 @@
 # Phase 0 進め方の方針 — モデル実現性スパイク（アプリ外）
 
 > 作成日: 2026-06-04
-> ステータス: 計画（**ドラフト・着手前**）。合格ラインの具体値・モデル最終決定・Small の diffusers 対応可否は **未確定**（→ §12）
+> ステータス: **着手中**（2026-06-06）。生成側（環境・SAO 1.0・MPS生成・速度/サーマル・metadata・本番生成基盤）は**検証済み**。残り＝判定基盤＋本番グリッド（→ 「次回の再開ポイント」／§12）
 > 用途: Phase 0 を「どの順で・何を測り・どこで go/no-go を切るか」を定める実行計画
 > 関連: [prototype-roadmap.md](../../prototype-roadmap.md)（Phase 0 の問い・完了条件・範囲外の出典）/ [phases/README.md](../README.md)（生ログ→昇格の運用）/ [foley-forge-dev.md](../../foley-forge-dev.md)（§2.2 エンジン段階・§5.1/§5.2 プロンプト・CFG）/ [decisions.md](../../decisions.md)（FF-D003/D004/D010/D011）/ [app-design-philosophy.md](../../../research/design-philosophy/app-design-philosophy.md)（§5 定量/定性の分担）/ [local-inference-optimization-strategy.md](../../../research/gpu-optimization/local-inference-optimization-strategy.md)（最適化は Phase 4+）
+
+---
+
+## 次回の再開ポイント（2026-06-06 時点）
+
+> このセッションでの到達と、次にやることの要約。**状態は全コミット済み・クリーン**。
+
+**ここまで（生成側はほぼ完了）**：環境構築・SAO 1.0 取得・MPS生成（存在的リスク突破）・速度/サーマル特性（**25step・連続が最適**）・metadataスキーマ・**本番生成基盤**（`src/spikes/phase0/engine.py`／`generate_grid.py`）を検証。**Q1 は環境音(雨)＋フォーリー(衣擦れ)で方向性OK**。記録：research/debugging×2・research/performance×1。
+
+**次回やること（この順）**：
+1. **判定基盤の設計**（§12 残）：合格ラインの仮値（§5.3）／多角判定パラメータ（§5.4：DSP閾値・CLAP扱い・クラウド audio-LLM 選定・L1〜L3 不一致処理）／判定CSV（mapping/judgments）スキーマ（§5.4(4)）。
+2. **本番グリッド実行**：`.venv/bin/python src/spikes/phase0/generate_grid.py --full`（8プロンプト×CFG3×seed3＝**72本・~1.5h・連続**・サンドボックス外）。
+3. **ブラインド判定**でQ1カバレッジを確定 → **採用モデルを decisions.md（FF-Dxxx）へ昇格**。
+
+> メモ：生成・MPS系は**サンドボックス外**で実行（[mps-blocked-by-sandbox](../../../research/debugging/mps-unavailable-in-sandbox.md)）。CFG は耳で効果あり（7.0 が濃淡クリア）＝スイープの意味あり。
 
 ---
 
@@ -521,8 +536,9 @@ flowchart LR
 - [x] **metadata スキーマ確定**（§9.2）：spike 出力を「スクリプトが依存できる契約」に確定 → `src/spikes/phase0/schema.py`（dataclass・v0）。**run/clip の2層**＋**audio/metadata 分離**（§5.4 ブラインド対応）。cold/warm は `gen_time_sec`＋`is_cold`、ロードは run の `model_load_sec`。**v0 はドラフト＝最初の生成で較正**。
 - [x] **縦スライス通過（手順3–5）**：SAO 1.0 を Mac/MPS で生成 → 「雨の森」が**方向性OK（耳）**＋出力が L0 DSP 健全。**Phase 0 の存在的リスク（Q1：T2A で実用方向のSEが作れるか）を1プロンプトで突破**（残り本体プロンプトでの確認は未）。スモークは `src/spikes/phase0/smoke_generate.py`。
 - [ ] **Python/torch の確定バージョン**：**Mac/MPS 側は確定**（Python 3.12 / torch 2.12.0 / diffusers 0.37.1 ＋ transformers・soundfile・numpy・pyyaml・psutil・torchsde・accelerate。MPS 実動作確認済み）。**CUDA 対応 wheel（Windows・第2環境）は未**。
-- [ ] **速度・グリッド実行可能性（Q2）**：cold＋サーマルスロットリングで **1本 ~5分（RTF~30・100step）** と遅い。本番グリッド（216生成）の現実性に直結 → **steps削減・冷却（間欠生成）・N調整**で実用速度を出せるか要検討（§9.1 の N調整と併せて）。
-- [ ] **本番スクリプトへのガード移植**：SAO×MPS の**最終ステップ SDEノイズのガード**（→ [research/debugging](../../../research/debugging/stable-audio-final-step-nan-recursion.md)）を本番生成にも入れる。将来は upstream 修正・版固定・別スケジューラも検討。
+- [x] **速度・グリッド実行可能性（Q2）→ 確定**：作業点 **25step**（実用下限・品質は100stepと大差なし）／**連続実行が最速**（冷却は速度に逆効果。適応制御も無意味＝[research/performance](../../../research/performance/stable-audio-mps-speed-thermal.md)）。本番グリッド72本は **~1.5h で実行可能**。メモリは MPS driver ~15GB/24GB。
+- [x] **本番スクリプトへのガード移植 → 完了**：最終ステップ SDEノイズのガードを `src/spikes/phase0/engine.py` に実装（`generate_grid.py` が使用）。詳細は [research/debugging](../../../research/debugging/stable-audio-final-step-nan-recursion.md)。将来は upstream 修正・版固定も検討。
+- [x] **本番生成基盤を検証（手順5'）**：`engine.py`（device検出/読込/生成/計測）＋`generate_grid.py`（grid生成）＋`schema.py` でサブセット4本を生成し、run.json／clip JSON／wav・メモリ計測まで正常。Q1 は**環境音(雨)＋フォーリー(衣擦れ)で方向性OK（2ソース）**。残りは本番グリッド(72本)での系統的カバレッジ。
 
 ---
 
