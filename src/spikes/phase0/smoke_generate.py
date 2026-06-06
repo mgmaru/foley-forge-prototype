@@ -25,8 +25,9 @@ from pathlib import Path
 
 import soundfile as sf
 import torch
-import yaml
 from diffusers import StableAudioPipeline
+
+from engine import apply_final_step_noise_guard, load_prompt  # 共通モジュール engine.py に集約（重複排除）
 
 # --- パス（cwd に依存しないよう、このファイルの位置から解決）---
 HERE = Path(__file__).resolve()
@@ -41,43 +42,6 @@ NUM_STEPS = 100                 # 推論ステップ。少ないほど速い（�
 GUIDANCE = 7.0                  # CFG。SAO の既定値
 SEED = 0
 DTYPE = torch.float32           # MPS は float32（float16/64 でなく。§4 で確認済み）
-
-
-def apply_final_step_noise_guard() -> None:
-    """SAO × この diffusers の既知バグ回避：拡散の **最終ステップ**で SDE ノイズ生成器
-    (torchsde BrownianTree) が境界を踏み、NaN／無限再帰を起こす問題を、最終ステップの
-    SDE ノイズだけ 0 にして回避する。
-
-    根拠：denoising 完了時の SDE 確率項は物理的に ~0 なので 0 で正しい。これにより
-    SAO 既定の `final_sigmas_type="zero"`（クリーンな出力）のまま完走できる。
-    通常ステップ（区間が正の範囲内）は元の挙動のまま。詳細は research/debugging/ に記録予定。
-    """
-    from diffusers.schedulers import scheduling_dpmsolver_sde as sde
-
-    if getattr(sde.BrownianTreeNoiseSampler, "_ff_guarded", False):
-        return  # 二重適用を防ぐ
-    _orig = sde.BrownianTreeNoiseSampler.__call__
-
-    def _guarded(self, sigma, sigma_next):
-        t0 = self.transform(torch.as_tensor(sigma))
-        t1 = self.transform(torch.as_tensor(sigma_next))
-        # 退化(|t1-t0|≈0)／境界外(<=0)＝最終ステップ → SDEノイズ0
-        if float((t1 - t0).abs()) < 1e-9 or float(t1) <= 0.0 or float(t0) <= 0.0:
-            ref = self.tree(t0.clamp(min=1e-3), t0.clamp(min=1e-3) + 1e-3)
-            return torch.zeros_like(ref)
-        return _orig(self, sigma, sigma_next)
-
-    sde.BrownianTreeNoiseSampler.__call__ = _guarded
-    sde.BrownianTreeNoiseSampler._ff_guarded = True
-
-
-def load_prompt(prompt_id: str) -> dict:
-    """prompts.yaml から指定 id のプロンプト1件を返す。"""
-    data = yaml.safe_load(PROMPTS_YAML.read_text(encoding="utf-8"))
-    for p in data["prompts"]:
-        if p["id"] == prompt_id:
-            return p
-    raise SystemExit(f"prompt id が見つかりません: {prompt_id}")
 
 
 def main() -> None:
