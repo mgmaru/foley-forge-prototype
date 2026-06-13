@@ -1,22 +1,21 @@
 # Phase 0 進め方の方針 — モデル実現性スパイク（アプリ外）
 
 > 作成日: 2026-06-04
-> ステータス: **着手中**（2026-06-06）。生成側（環境・SAO 1.0・MPS生成・速度/サーマル・metadata・本番生成基盤）は**検証済み**。残り＝判定基盤＋本番グリッド（→ 「次回の再開ポイント」／§12）
+> ステータス: **着手中**（2026-06-14）。生成側（環境・SAO 1.0・MPS生成・速度/サーマル・metadata・本番生成基盤）＋**判定設計**（§5.3 合格ライン・§5.4 多角判定＝L0/L1/L2・L3不採用）は**確定**。残り＝本番グリッド実行＋判定（→ 「次回の再開ポイント」／§12）
 > 用途: Phase 0 を「どの順で・何を測り・どこで go/no-go を切るか」を定める実行計画
 > 関連: [prototype-roadmap.md](../../prototype-roadmap.md)（Phase 0 の問い・完了条件・範囲外の出典）/ [phases/README.md](../README.md)（生ログ→昇格の運用）/ [foley-forge-dev.md](../../foley-forge-dev.md)（§2.2 エンジン段階・§5.1/§5.2 プロンプト・CFG）/ [decisions.md](../../decisions.md)（FF-D003/D004/D010/D011）/ [app-design-philosophy.md](../../../research/design-philosophy/app-design-philosophy.md)（§5 定量/定性の分担）/ [local-inference-optimization-strategy.md](../../../research/gpu-optimization/local-inference-optimization-strategy.md)（最適化は Phase 4+）
 
 ---
 
-## 次回の再開ポイント（2026-06-06 時点）
+## 次回の再開ポイント（2026-06-14 時点）
 
 > このセッションでの到達と、次にやることの要約。**状態は全コミット済み・クリーン**。
 
-**ここまで（生成側はほぼ完了）**：環境構築・SAO 1.0 取得・MPS生成（存在的リスク突破）・速度/サーマル特性（**25step・連続が最適**）・metadataスキーマ・**本番生成基盤**（`src/spikes/phase0/engine.py`／`generate_grid.py`）を検証。**Q1 は環境音(雨)＋フォーリー(衣擦れ)で方向性OK**。記録：research/debugging×2・research/performance×1。
+**ここまで**：生成側＝環境構築・SAO 1.0・MPS生成（存在的リスク突破）・速度/サーマル（**25step・連続が最適**）・metadataスキーマ・本番生成基盤（`engine.py`／`generate_grid.py`）を検証。**判定側＝設計確定（2026-06-13〜14）**：合格ライン3軸（§5.3：品質floor 50%／速度180s／メモリ）＋多角判定（§5.4：L0 DSP閾値較正・L2 CLAP記録のみ・**L3 audio-LLM 不採用**）。**Q1 は環境音(雨)＋フォーリー(衣擦れ)で方向性OK**。
 
 **次回やること（この順）**：
-1. **判定基盤の設計**（§12 残）：~~合格ラインの仮値（§5.3）~~ ~~多角判定パラメータ（§5.4）~~ **済（2026-06-13：合格ライン3軸／DSP閾値／CLAP記録のみ／L3不採用）** ／ 残り＝**判定CSV（mapping/judgments）スキーマ**（§5.4(4)・手順7で確定）。
-2. **本番グリッド実行**：`.venv/bin/python src/spikes/phase0/generate_grid.py --full`（8プロンプト×CFG3×seed3＝**72本・~1.5h・連続**・サンドボックス外）。
-3. **ブラインド判定**でQ1カバレッジを確定 → **採用モデルを decisions.md（FF-Dxxx）へ昇格**。
+1. **本番グリッド実行**：`.venv/bin/python src/spikes/phase0/generate_grid.py --full`（8プロンプト×CFG3×seed3＝**72本・~1.5h・連続**・サンドボックス外）。並行して **LAION-CLAP のローカル導入**（L2記録用・サンドボックス外）。
+2. **ブラインド判定（手順7）**：L0自動NG＋L1ブラインド＋CLAP記録。**判定CSV（mapping/judgments）スキーマもここで確定**（§5.4(4)）。→ カバー率でQ1判定 → **採用モデルを decisions.md（FF-Dxxx）へ昇格**。
 
 > メモ：生成・MPS系は**サンドボックス外**で実行（[mps-blocked-by-sandbox](../../../research/debugging/mps-unavailable-in-sandbox.md)）。CFG は耳で効果あり（7.0 が濃淡クリア）＝スイープの意味あり。
 
